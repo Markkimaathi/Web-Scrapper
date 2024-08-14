@@ -1,66 +1,71 @@
-from collections import OrderedDict
-
+import requests
+from bs4 import BeautifulSoup
+import time
 import random
-import string
-import unicodedata
 
-from difflib import SequenceMatcher
-
-
-def unique_stack_list(stack_list):
-    seen = set()
-    unique_list = []
-    for stack in stack_list:
-        stack_hash = stack['hash']
-        if stack_hash in seen:
-            continue
-        unique_list.append(stack)
-        seen.add(stack_hash)
-    return unique_list
+# Define a user-agent list to simulate requests from different browsers
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Firefox/53.0',
+    'Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.112 Safari/537.3',
+    'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.3',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_2) AppleWebKit/602.3.12 (KHTML, like Gecko) Version/10.0.2 Safari/602.3.12'
+]
 
 
-def unique_hashable(hashable_items):
-    """Removes duplicates from the list. Must preserve the orders."""
-    return list(OrderedDict.fromkeys(hashable_items))
+def get_page_content(url):
+    headers = {'User-Agent': random.choice(USER_AGENTS)}
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.content
+
+    except requests.exceptions.HTTPError as http_err:
+        print(f"HTTP error occurred: {http_err}")
+    except requests.exceptions.ConnectionError as conn_err:
+        print(f"Error connecting: {conn_err}")
+    except requests.exceptions.Timeout as timeout_err:
+        print(f"Timeout error: {timeout_err}")
+    except requests.exceptions.RequestException as req_err:
+        print(f"An error occurred: {req_err}")
+
+    return None
 
 
-def get_random_str(n):
-    chars = string.ascii_lowercase + string.digits
-    return ''.join(random.choice(chars) for i in range(n))
+def parse_html(content):
+    try:
+        soup = BeautifulSoup(content, 'html.parser')
+        return soup
+    except Exception as e:
+        print(f"An error occurred while parsing HTML: {e}")
+        return None
 
 
-def get_non_rec_text(element):
-    return ''.join(element.find_all(text=True, recursive=False)).strip()
+def extract_info(soup):
+    try:
+
+        tables = soup.find_all('table')
+        for idx, table in enumerate(tables):
+            print(f"\nTable {idx + 1}:")
+            rows = table.find_all('tr')
+            for row in rows:
+                cols = row.find_all(['td', 'th'])
+                cols = [ele.text.strip() for ele in cols]
+                print('\t'.join(cols))
+
+    except Exception as e:
+        print(f"An error occurred while extracting information: {e}")
+
+def scrape_website(url):
+    content = get_page_content(url)
+
+    if content:
+        soup = parse_html(content)
+        if soup:
+            extract_info(soup)
 
 
-def normalize(item):
-    if not isinstance(item, str):
-        return item
-    return unicodedata.normalize("NFKD", item.strip())
-
-
-def text_match(t1, t2, ratio_limit):
-    if hasattr(t1, 'fullmatch'):
-        return bool(t1.fullmatch(t2))
-    if ratio_limit >= 1:
-        return t1 == t2
-    return SequenceMatcher(None, t1, t2).ratio() >= ratio_limit
-
-
-class ResultItem():
-    def __init__(self, text, index):
-        self.text = text
-        self.index = index
-
-    def __str__(self):
-        return self.text
-
-
-class FuzzyText(object):
-    def __init__(self, text, ratio_limit):
-        self.text = text
-        self.ratio_limit = ratio_limit
-        self.match = None
-
-    def search(self, text):
-        return SequenceMatcher(None, self.text, text).ratio() >= self.ratio_limit
+if __name__ == "__main__":
+    url = "https://www.unido.org/get-involved-procurement/procurement-opportunities"
+    scrape_website(url)
